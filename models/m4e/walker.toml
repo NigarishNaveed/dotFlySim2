@@ -88,6 +88,22 @@ NAV_DLL_ACT = 0
 # walker warns when a project's TAKEOFF_ALT disagrees with it.
 MIS_TAKEOFF_ALT = 1.8
 
+# PX4's preflight GPS drift check, raised to its maximums. Before it allows a
+# takeoff, PX4 watches how fast the GPS position wanders while the aircraft
+# sits still (defaults ~0.1 m/s horizontal, 0.2 m/s vertical). The navsat
+# sensor in model.sdf adds WHITE noise -- ~0.5 m horizontal, 1 m vertical,
+# fresh every sample -- which reads as fast drift: in dotFlySim, with the same
+# noise, takeoff was accepted and never armed ("Preflight: GPS Horizontal/
+# Vertical Pos Drift too high") and the position estimate flapped on the
+# ground. PX4-only gate; the aircraft does not run PX4 and the GPS noise is
+# unchanged. Both spellings, because PX4 is moving these out of EKF2
+# (EKF2_REQ_* -> GNSS_REQ_*) and the image builds an unpinned PX4: the one
+# this PX4 lacks only logs "param not found" at boot.
+EKF2_REQ_HDRIFT = 1.0
+EKF2_REQ_VDRIFT = 1.5
+GNSS_REQ_HDRIFT = 1.0
+GNSS_REQ_VDRIFT = 1.5
+
 # ── what gets spawned alongside the airframe ────────────────────────────────
 # The payload/gimbal is a SEPARATE Gazebo model, teleported 50 times a second
 # to track the airframe. That is not a quirk: Gazebo's set_pose only sticks on

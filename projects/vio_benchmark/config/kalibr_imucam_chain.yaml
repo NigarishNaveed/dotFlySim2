@@ -1,0 +1,43 @@
+%YAML:1.0
+#
+# dotFlySim2: the forward perception ("fisheye") pair -- pinhole renders, see
+# config/perception_calib.yaml
+# and the <pose> of perception_front_{left,right} in models/m4e/model.sdf.
+# Change those and this together.
+#
+# T_imu_cam maps a point in the camera's OPTICAL frame (x right, y down,
+# z along the optical axis) into the IMU/body FLU frame. The optical axis is
+# body +X, so the rotation's columns are the camera axes written in the body:
+#     cam x (right)   = body -Y  ->  ( 0, -1,  0)
+#     cam y (down)    = body -Z  ->  ( 0,  0, -1)
+#     cam z (forward) = body +X  ->  ( 1,  0,  0)
+# Translation: 0.30 m forward, +/-0.045 m left/right (9 cm baseline, ASSUMED --
+# see perception_calib.yaml).
+#
+# Pinhole with zero distortion: the render is rectified by construction.
+cam0:
+  T_imu_cam:
+    - [ 0.0,  0.0,  1.0,  0.30 ]
+    - [-1.0,  0.0,  0.0,  0.045]
+    - [ 0.0, -1.0,  0.0,  0.0 ]
+    - [ 0.0,  0.0,  0.0,  1.0 ]
+  cam_overlaps: [1]
+  camera_model: pinhole
+  distortion_coeffs: [0.0, 0.0, 0.0, 0.0]
+  distortion_model: radtan
+  intrinsics: [352.0, 352.0, 352.0, 352.0] # fu, fv, cu, cv
+  resolution: [704, 704]
+  rostopic: /wrapper/psdk_ros2/perception_stereo_left_stream
+cam1:
+  T_imu_cam:
+    - [ 0.0,  0.0,  1.0,  0.30 ]
+    - [-1.0,  0.0,  0.0, -0.045]
+    - [ 0.0, -1.0,  0.0,  0.0 ]
+    - [ 0.0,  0.0,  0.0,  1.0 ]
+  cam_overlaps: [0]
+  camera_model: pinhole
+  distortion_coeffs: [0.0, 0.0, 0.0, 0.0]
+  distortion_model: radtan
+  intrinsics: [352.0, 352.0, 352.0, 352.0] # fu, fv, cu, cv
+  resolution: [704, 704]
+  rostopic: /wrapper/psdk_ros2/perception_stereo_right_stream

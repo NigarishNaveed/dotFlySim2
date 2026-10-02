@@ -1522,6 +1522,73 @@ def angular_velocity_to_vector3(msg, ctx: ConversionContext):
     return out
 
 
+def _px4_sample_stamp(px4_us, ctx: ConversionContext) -> Optional[RosTime]:
+    """
+    The Gazebo-time stamp of a PX4 sample, from PX4's own `timestamp` field.
+
+    ctx.ros_stamp() is "the last /clock this bridge has received", read when
+    the message is CONVERTED. That is fine for 1 Hz status, and wrong for a
+    50 Hz IMU feeding a visual-inertial estimator: with the stereo pair
+    rendering the simulation runs at roughly half real time, this Python node
+    falls behind, and it converts SensorCombined in bursts. A whole burst then
+    got the same stale clock value and the next burst jumped ahead -- measured
+    on a recording: 81 of 499 samples repeating the previous stamp, up to 11
+    on one value, then gaps of 164 ms. An estimator integrates the IMU between
+    stamps, so that corrupts its prediction outright.
+
+    PX4 knows when it took each sample. Its clock runs in LOCKSTEP with
+    Gazebo's, from a different zero (simty/clock.py), so the two differ by a
+    CONSTANT. That constant is measured once, as the 90th percentile of
+    (last /clock - PX4 timestamp) over the first ~5 s of samples, and then
+    held: a sliding estimate moves with the bursts and puts back the very
+    jitter this exists to remove (tested: up to 149 ms). It is re-measured only
+    if the two clocks jump apart by more than 0.5 s (a world or PX4 restart).
+    The stamp is PX4 time + offset -- spaced exactly as the samples were
+    taken -- held monotonic. What bias is left in the constant is what an
+    estimator's camera-IMU time-offset calibration is for.
+
+    Returns None (caller falls back to ros_stamp) when there is no sim clock
+    or no usable PX4 timestamp, e.g. on a real Manifold.
+    """
+    if ctx.sim_clock is None or ctx.p("stamp_source", "auto") == "wall":
+        return None
+    try:
+        px4_ns = int(px4_us) * 1000
+    except (TypeError, ValueError):
+        return None
+    sim_ns = ctx.sim_clock.now_ns()
+    if px4_ns <= 0 or sim_ns is None:
+        return None
+
+    observed = sim_ns - px4_ns
+    offset = ctx.shared.get("imu_offset_ns")
+    if offset is not None and abs(observed - offset) > 500_000_000:
+        offset = None                       # a clock jumped: measure again
+        ctx.shared.pop("imu_offset_window", None)
+        ctx.shared.pop("imu_last_stamp_ns", None)
+        ctx.shared.pop("imu_offset_ns", None)
+    if offset is None:
+        window = ctx.shared.setdefault("imu_offset_window", [])
+        window.append(observed)
+        # A stale /clock only ever makes an observation SMALLER than the true
+        # offset, so the median of a bursty window sits well below it (-143 ms
+        # in a test with clock readings up to 160 ms stale). The 90th
+        # percentile is the least-stale reading that is not a lone outlier.
+        offset = sorted(window)[(len(window) * 9) // 10]
+        if len(window) >= 250:              # ~5 s at 50 Hz: lock it
+            ctx.shared["imu_offset_ns"] = offset
+            ctx.shared.pop("imu_offset_window", None)
+            ctx.note(f"imu: stamping from PX4 sample time, Gazebo - PX4 offset locked at "
+                     f"{offset / 1e9:.3f} s")
+
+    stamp_ns = px4_ns + offset
+    last = int(ctx.shared.get("imu_last_stamp_ns", 0))
+    if stamp_ns <= last:             # the median moved back: never go back in time
+        stamp_ns = last + 1000
+    ctx.shared["imu_last_stamp_ns"] = stamp_ns
+    return RosTime(sec=int(stamp_ns // 1_000_000_000), nanosec=int(stamp_ns % 1_000_000_000))
+
+
 def sensor_combined_to_imu(msg, ctx: ConversionContext):
     """
     SensorCombined (+ VehicleAttitude) -> sensor_msgs/Imu, FRD -> FLU.
@@ -1564,7 +1631,9 @@ def sensor_combined_to_imu(msg, ctx: ConversionContext):
         return None
 
     out = Imu()
-    out.header.stamp = ctx.ros_stamp()
+    # PX4's own sample time, not the time this node got round to converting
+    # it -- see _px4_sample_stamp.
+    out.header.stamp = _px4_sample_stamp(_g(msg, "timestamp", 0), ctx) or ctx.ros_stamp()
     out.header.frame_id = str(ctx.p("body_frame_id", "base_link"))
     out.linear_acceleration.x, out.linear_acceleration.y, out.linear_acceleration.z = (
         _frd_to_flu(*accel[:3])

@@ -376,6 +376,16 @@ def write_bridge_yaml(out: str, topics: dict[str, tuple[str, str]]) -> tuple[str
         '  gz_type_name: "gz.msgs.Clock"',
         "  direction: GZ_TO_ROS",
         "",
+        # Published by the OdometryPublisher in models/m4e/model.sdf. Not
+        # lazy: a recording must catch every sample from the first one. For
+        # scoring estimators only -- missions stay on /wrapper/psdk_ros2.
+        "# Ground truth (base_link pose, world ENU, 100 Hz) for scoring estimators.",
+        '- ros_topic_name: "/drone/ground_truth/odom"',
+        '  gz_topic_name: "/drone/ground_truth/odom"',
+        '  ros_type_name: "nav_msgs/msg/Odometry"',
+        '  gz_type_name: "gz.msgs.Odometry"',
+        "  direction: GZ_TO_ROS",
+        "",
     ]
     n = 0
     for name, (typ, topic) in sorted(topics.items(), key=lambda kv: kv[1][1]):

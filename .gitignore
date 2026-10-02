@@ -20,3 +20,6 @@ __pycache__/
 
 # Composed/generated at run time; always safe to delete.
 gz_runtime/
+
+# OpenVINS, cloned by projects/vio_benchmark/scripts/setup_openvins.sh.
+projects/open_vins/

@@ -1,0 +1,123 @@
+# Stereo calibration and inertial noise for the forward perception pair.
+#
+# WHY THIS FILE EXISTS AT ALL
+# ---------------------------
+# Because the aircraft cannot tell you any of it.
+#
+# PSDK does expose a perception-parameters call, and psdk_ros2 republishes it
+# on perception_camera_parameters. On the Matrice 4E that call is unusable:
+# DjiPerception_GetStereoCameraParameters() returns 236 and then segfaults the
+# process (psdk-ros2 JAZZY_CONTAINER_GUIDE.md "Known issues"; the wrapper ships
+# publish_camera_parameters: false for that reason). The stereo images
+# themselves are fine -- only the calibration is unreachable.
+#
+# So anything that needs intrinsics or extrinsics must carry its own, and any
+# code that reads them from the topic works in simulation and dies on the
+# aircraft. The simulator therefore does NOT publish that topic either: this
+# file is the single source of truth on both sides, which is the whole point of
+# running against the wrapper surface.
+#
+# The IMU noise below is here for the same reason. The real wrapper leaves all
+# three covariance arrays in sensor_msgs/Imu at zero (telemetry.cpp), so an
+# estimator must not read weights off that message.
+#
+# KEEPING THIS IN STEP WITH THE SIMULATION
+# ----------------------------------------
+# Every camera number here is duplicated in models/m4e/model.sdf (and in
+# projects/vio_benchmark/config/kalibr_imucam_chain.yaml); the imu block comes
+# from IMU_CALIBRATION.md. SDF cannot reference a YAML file, so the duplication
+# is unavoidable; change them together. The values marked ASSUMED are not DJI specifications -- see below.
+
+perception:
+  # Only FRONT is simulated. The aircraft also supports REAR, LEFT, RIGHT and
+  # DOWN (never UP); the simulation refuses those explicitly rather than
+  # silently returning nothing. One direction streams at a time, on hardware
+  # and here.
+  direction: FRONT
+
+  image:
+    width: 704
+    height: 704
+    encoding: mono8
+    rate_hz: 20.0
+
+  # Identical for both cameras: the pair is rectified by construction here,
+  # there is no lens distortion in the render, and the epipolar lines are exact
+  # image rows. A real fisheye pair is rectified by the aircraft before the
+  # images are handed out, so this is the right shape -- but it is cleaner than
+  # hardware, and a matcher tuned only against this will meet residual
+  # distortion and slightly non-horizontal epipolars on the real thing.
+  intrinsics:
+    fx: 352.0
+    fy: 352.0
+    cx: 352.0
+    cy: 352.0
+  distortion: [0.0, 0.0, 0.0, 0.0, 0.0]   # plumb_bob, all zero: see above
+
+  # ASSUMED. DJI publishes no baseline for the M4E and the API that would
+  # report it is the one that crashes. 0.09 m is chosen against the 0.64 x
+  # 0.56 m airframe. Depth error scales as z^2 / (f * b), so at 10 m this pair
+  # resolves roughly 10^2 / (352 * 0.09) = 3.2 m per pixel of disparity error
+  # -- shift the baseline and every depth in the system moves with it.
+  baseline_m: 0.09
+
+  # ASSUMED. A rectilinear stand-in for the usable centre of a fisheye pair.
+  horizontal_fov_rad: 1.5708
+
+  # Camera frame relative to the body (FLU, origin at base_link). Matches the
+  # <pose> of each sensor in models/m4e/model.sdf. The optical axis is body +X.
+  extrinsics:
+    left:
+      translation: [0.30,  0.045, 0.0]
+      rotation_rpy: [0.0, 0.0, 0.0]
+    right:
+      translation: [0.30, -0.045, 0.0]
+      rotation_rpy: [0.0, 0.0, 0.0]
+
+imu:
+  # The M4E caps this topic at 50 Hz: asking for 100 returns NONSUPPORT
+  # (psdk_wrapper/cfg/psdk_params.yaml). The Gazebo sensor runs at 250 Hz and
+  # the bridge decimates it.
+  rate_hz: 50.0
+
+  # Noise DENSITIES of the published topic, measured on a real Matrice 4E and
+  # matched by the simulation (IMU_CALIBRATION.md section 6). These, not the
+  # SDF stddevs, are what an estimator reading /wrapper/psdk_ros2/imu wants:
+  # the SDF values are set ~1.9x lower because decimating 250 -> 50 Hz without
+  # anti-aliasing folds noise back in (section 7).
+  gyro_noise_density: [7.92e-5, 6.94e-5, 7.27e-5]     # rad/s/sqrt(Hz), x y z
+  accel_noise_density: [2.78e-4, 2.97e-4, 1.33e-3]    # m/s^2/sqrt(Hz), x y z
+
+  # Measured static gyro bias (rad/s); weakly constrained in time.
+  gyro_bias: [-5.651e-4, 8.837e-4, -4.249e-4]
+
+  # Bias random walk: inherited from the x500, NOT measured (section 8). These
+  # are what an estimator's bias states model; they are not measurement noise.
+  gyro_bias_stddev: [3.22e-5, 7.65e-5, 5.37e-5]
+  gyro_bias_correlation_time_s: 300.0
+  accel_bias_stddev: [1.47e-3, 9.75e-4, 1.07e-3]
+  accel_bias_correlation_time_s: 100.0
+
+gnss:
+  # /wrapper/psdk_ros2/gps_position, raw receiver fix from SensorGps. 5 Hz is
+  # the M4E's cap for gps_data.
+  rate_hz: 5.0
+
+  # Horizontal sigma comes out of the navsat noise in models/m4e/model.sdf,
+  # which is specified in DEGREES because that is what gz-sensors applies
+  # (gazebosim/gz-sensors#325): 4.5e-6 deg x 111320 m/deg ~= 0.50 m. That
+  # matches the sigma_p = 0.5 m Cremona et al. use for a conventional receiver.
+  #
+  # PREFER THE COVARIANCE ON THE MESSAGE. Unlike the IMU, NavSatFix genuinely
+  # carries position_covariance and the bridge populates it from eph/epv, so
+  # these are a fallback for when position_covariance_type is UNKNOWN.
+  horizontal_stddev_m: 0.50
+  vertical_stddev_m: 1.0
+
+  # Antenna offset in the body frame: t^B_A in the paper's notation, the lever
+  # arm between the IMU and the GNSS antenna. Both sensors sit at base_link's
+  # origin in models/m4e/model.sdf, so this is exactly zero here and the lever-
+  # arm term drops out of the residual. It is written down anyway because it is
+  # NOT zero on the aircraft, and code that omits the term will look correct in
+  # simulation and carry a constant offset in the field.
+  antenna_offset_body: [0.0, 0.0, 0.0]

@@ -1,0 +1,58 @@
+%YAML:1.0
+#
+# dotFlySim2: the wrapper IMU, /wrapper/psdk_ros2/imu.
+#
+# FRAME. The bridge publishes the IMU in the body FLU frame at base_link
+# (x forward, y left, z up), so imu0 IS the body and T_i_b is identity. At rest
+# linear_acceleration.z reads about +9.8 (checked: +9.787 in a recording).
+#
+# NOISE, from IMU_CALIBRATION.md section 6: the published topic was tuned to the
+# REAL aircraft's noise densities, measured on a Matrice 4E,
+#     gyro  7.92e-5 / 6.94e-5 / 7.27e-5  rad/s/sqrt(Hz)   (x / y / z)
+#     accel 2.78e-4 / 2.97e-4 / 1.33e-3  m/s^2/sqrt(Hz)
+# OpenVINS takes one number per sensor, so the noisiest axis is used, then
+# inflated ~5x: the stream is 50 Hz with uneven spacing (the bridge passes on
+# about every fifth PX4 sample), and a filter told its IMU is better than it is
+# fails abruptly, while one told it is a little worse only loses a little
+# accuracy. Tune down from here once runs are stable.
+#
+# BIAS RANDOM WALK, from the model's dynamic_bias_stddev (inherited from the
+# x500, NOT measured -- IMU_CALIBRATION.md section 8): sigma * sqrt(2 / tau) gives
+# ~6e-6 (gyro, tau 300 s) and ~2e-4 (accel, tau 100 s); inflated ~10x.
+# The gyro also carries a measured static bias of up to 9e-4 rad/s, which
+# OpenVINS estimates as part of its state.
+imu0:
+  T_i_b:
+    - [1.0, 0.0, 0.0, 0.0]
+    - [0.0, 1.0, 0.0, 0.0]
+    - [0.0, 0.0, 1.0, 0.0]
+    - [0.0, 0.0, 0.0, 1.0]
+  accelerometer_noise_density: 6.5e-3   # [ m / s^2 / sqrt(Hz) ]
+  accelerometer_random_walk: 2.0e-3     # [ m / s^3 / sqrt(Hz) ]
+  gyroscope_noise_density: 4.0e-4       # [ rad / s / sqrt(Hz) ]
+  gyroscope_random_walk: 6.0e-5         # [ rad / s^2 / sqrt(Hz) ]
+  rostopic: /wrapper/psdk_ros2/imu
+  time_offset: 0.0
+  # 50 Hz is the M4E cap for this topic
+  update_rate: 50.0
+  model: "kalibr"
+  Tw:
+    - [ 1.0, 0.0, 0.0 ]
+    - [ 0.0, 1.0, 0.0 ]
+    - [ 0.0, 0.0, 1.0 ]
+  R_IMUtoGYRO:
+    - [ 1.0, 0.0, 0.0 ]
+    - [ 0.0, 1.0, 0.0 ]
+    - [ 0.0, 0.0, 1.0 ]
+  Ta:
+    - [ 1.0, 0.0, 0.0 ]
+    - [ 0.0, 1.0, 0.0 ]
+    - [ 0.0, 0.0, 1.0 ]
+  R_IMUtoACC:
+    - [ 1.0, 0.0, 0.0 ]
+    - [ 0.0, 1.0, 0.0 ]
+    - [ 0.0, 0.0, 1.0 ]
+  Tg:
+    - [ 0.0, 0.0, 0.0 ]
+    - [ 0.0, 0.0, 0.0 ]
+    - [ 0.0, 0.0, 0.0 ]

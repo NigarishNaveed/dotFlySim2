@@ -874,5 +874,38 @@
       <rollingMomentCoefficient>1e-06</rollingMomentCoefficient>
       <motorVelocityTopic>rotor_3_velocity</motorVelocityTopic>
     </plugin>
+
+    <!--
+         GROUND TRUTH, for scoring estimators (projects/vio_benchmark).
+
+         The exact world pose and velocity of base_link, straight from the
+         physics, with no noise. Nothing on a real aircraft has this: it
+         exists so a VIO run can be measured against the truth instead of
+         against position_fused, PX4's own GPS/IMU estimate. Frame: the
+         world's ENU. base_link is also where imu_sensor sits, so this is the
+         IMU pose an estimator outputs.
+
+         Bridged to ROS as /drone/ground_truth/odom by tools/compose_sim.py.
+         A mission must never read it (wrapper surface only, CPP_DESIGN.md);
+         only the scoring does.
+
+         ALL THREE TOPICS ARE SET, NOT JUST odom_topic. This system also
+         publishes OdometryWithCovariance, by default on
+         /model/MODEL/odometry_with_covariance, which is exactly the topic
+         PX4's gz_bridge subscribes to for EXTERNAL VISION and forwards to
+         EKF2 as vehicle_visual_odometry. Left at the default, PX4 fuses
+         perfect ground truth next to GPS; in dotFlySim that broke its
+         position estimate at start-up. Its TF output defaults to
+         /model/MODEL/pose and is moved too.
+    -->
+    <plugin filename="gz-sim-odometry-publisher-system" name="gz::sim::systems::OdometryPublisher">
+      <odom_frame>world</odom_frame>
+      <robot_base_frame>base_link</robot_base_frame>
+      <odom_topic>/drone/ground_truth/odom</odom_topic>
+      <odom_covariance_topic>/drone/ground_truth/odom_with_covariance</odom_covariance_topic>
+      <tf_topic>/drone/ground_truth/tf</tf_topic>
+      <odom_publish_frequency>100</odom_publish_frequency>
+      <dimensions>3</dimensions>
+    </plugin>
   </model>
 </sdf>

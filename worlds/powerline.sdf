@@ -45,7 +45,7 @@
       </sky>
     </scene>
 
-    <!-- Textured ground plane -->
+    <!-- Textured ground plane (texture: models/ground_scrub, tools/gen_ground_texture.py) -->
     <model name="ground_plane">
       <static>true</static>
       <link name="link">
@@ -71,29 +71,41 @@
                shadow of its own to cast. -->
           <cast_shadows>false</cast_shadows>
           <geometry>
-            <plane>
-              <normal>0 0 1</normal>
-              <!-- 4 km, not 1 km. The COLLISION plane above is infinite — a
-                   plane in ODE has no extent — but the VISUAL one is a real
-                   quad, and at 1000 m it ended at x=500 while the line runs
-                   out to x=860: towers 3, 4 and 5 stood over a hole with the
-                   sky showing through, and the right of way ran off a cliff.
-                   Anything that renders the far end of the corridor sees the
-                   edge, so the edge has to be past anything worth looking
-                   at. -->
-              <size>4000 4000</size>
-            </plane>
+            <!-- A MESH, not a <plane>: a plane stretches one texture across all
+                 4 km, a pixel per two metres. models/ground_scrub/meshes/ground.obj
+                 is the same 4 km square with texture coordinates that repeat
+                 the tile every 32 m (tools/gen_ground_texture.py). 4 km, not
+                 1 km, for the reason the plane was: at 1000 m it ended at x=500
+                 while the line runs out to x=860, and towers 3-5 stood over a
+                 hole. The COLLISION plane above is unchanged. -->
+            <mesh>
+              <uri>model://ground_scrub/meshes/ground.obj</uri>
+            </mesh>
           </geometry>
           <material>
-            <!-- Dry scrub rather than lawn green. The saturation matters to
-                 more than taste: demo_camera_track finds a lattice tower by
-                 looking for LOW saturation against a saturated background, so
-                 a desaturated ground makes that demo's default target window
-                 harder, not easier — this is still comfortably saturated
-                 enough to separate from galvanised steel. -->
-            <ambient>0.22 0.28 0.13 1</ambient>
-            <diffuse>0.38 0.44 0.22 1</diffuse>
+            <!-- TEXTURED, so cameras have features to track. It used to be one
+                 flat colour, and a visual-inertial estimator flying over it
+                 found 0 trackable corners below the horizon (dotFlySim): with
+                 nothing near that shifts as the aircraft moves, it cannot see
+                 itself move. The texture is dry scrub , grass, bushes, bare
+                 soil , around the old flat colour, so the world looks the same
+                 from a distance.
+
+                 Still saturated, deliberately: demo_camera_track finds a
+                 lattice tower by looking for LOW saturation against a
+                 saturated background. Only brightness and the scrub/soil mix
+                 vary; the texture's least saturated pixel is still well clear
+                 of galvanised steel. -->
+            <ambient>1 1 1 1</ambient>
+            <diffuse>1 1 1 1</diffuse>
             <specular>0.05 0.05 0.05 1</specular>
+            <pbr>
+              <metal>
+                <albedo_map>model://ground_scrub/materials/textures/scrub.png</albedo_map>
+                <roughness>1.0</roughness>
+                <metalness>0.0</metalness>
+              </metal>
+            </pbr>
           </material>
         </visual>
         <pose>0 0 0 0 0 0</pose>

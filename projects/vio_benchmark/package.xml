@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>vio_benchmark</name>
+  <version>1.0.0</version>
+  <description>
+    Flies a helix round a tower or a transit above the conductors, closed loop over the wrapper surface, so a visual-inertial estimator (OpenVINS) can be scored on each against Gazebo ground truth.
+
+    Publishes the flight phase, in simulation time, as JSON on ~/phase.
+    scripts/vio_trial.sh runs OpenVINS, the recorder, this flight and
+    scripts/vio_eval.py in one go.
+  </description>
+  <maintainer email="dotfly0@gmail.com">Farmevo Engineering</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>psdk_interfaces</depend>
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
